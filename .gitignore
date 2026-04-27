@@ -1,0 +1,21 @@
+# Node
+node_modules/
+.next/
+out/
+build/
+.pnp
+.pnp.js
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.env
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db

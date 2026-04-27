@@ -1,0 +1,40 @@
+import os
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from ai_engine import PipelineEngine, logger
+
+app = FastAPI()
+
+# Allow frontend to call backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class GenerateRequest(BaseModel):
+    prompt: str
+
+@app.post("/api/generate")
+async def generate_app(req: GenerateRequest):
+    if not os.getenv("GEMINI_API_KEY"):
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY environment variable is missing. Please set it in backend/.env")
+        
+    engine = PipelineEngine()
+    try:
+        config_obj, logs = engine.run_pipeline(req.prompt)
+        return {
+            "success": True, 
+            "config": config_obj.model_dump(), 
+            "logs": logs
+        }
+    except Exception as e:
+        logger.error(f"Generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
