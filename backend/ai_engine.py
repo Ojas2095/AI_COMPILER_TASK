@@ -24,7 +24,7 @@ def get_model():
     else:
         genai.configure(api_key=api_key)
     
-    return genai.GenerativeModel("gemini-1.5-pro")
+    return genai.GenerativeModel("gemini-2.5-flash")
 
 def generate_with_repair(
     prompt: str,
@@ -50,7 +50,17 @@ def generate_with_repair(
                     response_mime_type="application/json"
                 )
             )
-            raw_text = response.text
+            raw_text = response.text.strip()
+            
+            # Strip markdown formatting if the model weirdly ignores response_mime_type
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.startswith("```"):
+                raw_text = raw_text[3:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            raw_text = raw_text.strip()
+            
             attempts_log.append({"attempt": attempt+1, "status": "success", "raw": raw_text})
             
             # Parse and Validate (Pydantic enforces strictness)
@@ -68,7 +78,7 @@ def generate_with_repair(
             error_msg = f"Schema validation failed. Error: {e.json()}"
             logger.error("Validation error caught. Initiating repair...")
             attempts_log.append({"attempt": attempt+1, "status": "validation_error", "error": str(e)})
-            current_prompt += f"\n\n[SYSTEM: Your last output had SCHEMA ERRORS. Please FIX the following errors: {e.errors()}. Make sure all required keys are present and types are correct.]"
+            current_prompt += f"\n\n[SYSTEM CHECK] Your last generated payload was:\n{raw_text}\n\n[SYSTEM ERROR] This payload failed strict schema rules with the following ValidationErrors:\n{e.errors()}.\n\nYou MUST fix these exact errors (e.g. check for missing keys, cross-layer field mismatches, hallucinated extra properties). Re-generate the entire strictly valid JSON."
             
         except Exception as e:
             logger.error(f"Unknown generation error: {e}")

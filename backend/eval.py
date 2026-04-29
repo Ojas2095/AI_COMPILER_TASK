@@ -1,7 +1,11 @@
 import os
 import json
 import time
+from dotenv import load_dotenv
 from ai_engine import PipelineEngine
+
+load_dotenv()
+
 
 PROMPTS = [
     "Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments. Admins can see analytics.",
