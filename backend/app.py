@@ -7,8 +7,11 @@ from ai_engine import PipelineEngine, logger
 
 load_dotenv()
 
-
-app = FastAPI()
+app = FastAPI(
+    title="AI Software Compiler",
+    description="A deterministic multi-stage pipeline that compiles natural language into validated, executable software configurations.",
+    version="2.0.0"
+)
 
 # Allow frontend to call backend
 app.add_middleware(
@@ -22,6 +25,15 @@ app.add_middleware(
 class GenerateRequest(BaseModel):
     prompt: str
 
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model": "gemini-2.5-flash",
+        "pipeline_stages": ["intent_extraction", "system_design", "schema_generation", "refinement"],
+        "api_key_set": bool(os.getenv("GEMINI_API_KEY"))
+    }
+
 @app.post("/api/generate")
 async def generate_app(req: GenerateRequest):
     if not os.getenv("GEMINI_API_KEY"):
@@ -29,11 +41,12 @@ async def generate_app(req: GenerateRequest):
         
     engine = PipelineEngine()
     try:
-        config_obj, logs = engine.run_pipeline(req.prompt)
+        config_obj, logs, metadata = engine.run_pipeline(req.prompt)
         return {
             "success": True, 
             "config": config_obj.model_dump(), 
-            "logs": logs
+            "logs": logs,
+            "metadata": metadata
         }
     except Exception as e:
         logger.error(f"Generation failed: {str(e)}")
@@ -41,4 +54,4 @@ async def generate_app(req: GenerateRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)

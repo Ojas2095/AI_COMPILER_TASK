@@ -8,6 +8,7 @@ load_dotenv()
 
 
 PROMPTS = [
+    # 10 Real Product Prompts
     "Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments. Admins can see analytics.",
     "A simple blog site with posts and comments.",
     "A medical scheduling app where doctors set availability and patients book appointments. Needs HIPAA compliance mentions.",
@@ -18,7 +19,7 @@ PROMPTS = [
     "Real estate listing platform with map view.",
     "A fitness tracking app.",
     "School management system for grades and attendance.",
-    # Edge Cases
+    # 10 Edge Cases
     "Build a thing.",  # Vague
     "System with users.", # Incomplete
     "Make an app that does both ride sharing and food delivery and crypto trading.", # Overly complex
@@ -40,14 +41,17 @@ def run_evals():
         start_time = time.time()
         
         try:
-            config, logs = engine.run_pipeline(prompt)
+            config, logs, metadata = engine.run_pipeline(prompt)
             success = True
             error = None
+            cost_data = metadata.get("cost", {})
         except Exception as e:
             success = False
             config = None
             logs = []
+            metadata = {}
             error = str(e)
+            cost_data = {}
             
         latency = time.time() - start_time
         
@@ -59,34 +63,71 @@ def run_evals():
                 if len(stage_logs) > 1:
                     total_retries += (len(stage_logs) - 1)
         
+        # Classify failure type
+        failure_type = None
+        if not success and error:
+            if "429" in error:
+                failure_type = "rate_limited"
+            elif "ValidationError" in error or "Cross-Layer" in error:
+                failure_type = "validation_failure"
+            elif "JSON" in error:
+                failure_type = "json_parse_error"
+            else:
+                failure_type = "unknown"
+        
         results.append({
             "prompt": prompt,
             "success": success,
             "latency": latency,
             "total_retries": total_retries,
-            "error": error
+            "failure_type": failure_type,
+            "error": error,
+            "cost": cost_data,
+            "is_edge_case": idx >= 10
         })
         
-        print(f"   Success: {success} | Latency: {latency:.2f}s | Retries: {total_retries}")
+        print(f"   Success: {success} | Latency: {latency:.2f}s | Retries: {total_retries} | Cost: ${cost_data.get('total_cost_usd', 'N/A')}")
+        
+        # Rate limit protection between prompts
+        if idx < len(PROMPTS) - 1:
+            print("   Waiting 15s for rate limit cooldown...")
+            time.sleep(15)
         
     # Summarize
     total_prompts = len(PROMPTS)
     successful = sum(1 for r in results if r["success"])
+    real_prompts = [r for r in results if not r["is_edge_case"]]
+    edge_prompts = [r for r in results if r["is_edge_case"]]
     avg_latency = sum(r["latency"] for r in results) / total_prompts
     avg_retries = sum(r["total_retries"] for r in results) / total_prompts
+    total_cost = sum(r["cost"].get("total_cost_usd", 0) for r in results if r["cost"])
+    
+    # Failure type breakdown
+    failure_types = {}
+    for r in results:
+        if r["failure_type"]:
+            failure_types[r["failure_type"]] = failure_types.get(r["failure_type"], 0) + 1
     
     print("\n\n=== EVALUATION REPORT ===")
     print(f"Total Evaluated: {total_prompts}")
-    print(f"Success Rate: {(successful/total_prompts)*100}%")
+    print(f"Overall Success Rate: {(successful/total_prompts)*100:.1f}%")
+    print(f"Real Prompt Success: {sum(1 for r in real_prompts if r['success'])}/{len(real_prompts)}")
+    print(f"Edge Case Success: {sum(1 for r in edge_prompts if r['success'])}/{len(edge_prompts)}")
     print(f"Avg Latency: {avg_latency:.2f} seconds")
     print(f"Avg Retries Needed: {avg_retries:.1f}")
+    print(f"Total Estimated Cost: ${total_cost:.4f}")
+    print(f"Failure Types: {failure_types}")
     
     with open("eval_results.json", "w") as f:
         json.dump({
             "metrics": {
                 "success_rate": successful/total_prompts,
+                "real_prompt_success_rate": sum(1 for r in real_prompts if r["success"])/len(real_prompts),
+                "edge_case_success_rate": sum(1 for r in edge_prompts if r["success"])/len(edge_prompts),
                 "avg_latency": avg_latency,
-                "avg_retries": avg_retries
+                "avg_retries": avg_retries,
+                "total_cost_usd": total_cost,
+                "failure_types": failure_types
             },
             "runs": results
         }, f, indent=2)

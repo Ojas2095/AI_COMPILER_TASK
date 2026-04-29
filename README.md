@@ -1,63 +1,134 @@
-# AI Platform Compiler Demo Task
+# AI Software Compiler
 
-This repository contains an end-to-end multi-stage deterministic "AI compiler" pipeline that translates natural language into executable frontend and backend system specifications.
+> A deterministic, multi-stage pipeline that compiles natural language into validated, executable software configurations — like a compiler, but for entire applications.
 
-## 🏗 Stack
-- **Backend:** Python + FastAPI + Pydantic + Google Gemini (`gemini-1.5-pro`)
+**Reference:** Inspired by [base44.com](https://base44.com/)
+
+## Architecture
+
+```
+Natural Language Prompt
+        │
+        ▼
+┌───────────────────┐
+│  Stage 1: Intent  │  Extract entities, roles, assumptions, detect conflicts
+│    Extraction      │  Output: IntentSchema (Pydantic-validated)
+└───────┬───────────┘
+        │
+        ▼
+┌───────────────────┐
+│  Stage 2: System  │  Map intent → pages, tables, APIs
+│    Design          │  Output: ArchitectureSchema
+└───────┬───────────┘
+        │
+        ▼
+┌───────────────────┐
+│  Stage 3: Schema  │  Generate UI components, DB columns, API details,
+│    Generation      │  auth rules, and business logic
+└───────┬───────────┘  Output: AppConfigSchema (cross-layer validated)
+        │
+        ▼
+┌───────────────────┐
+│  Stage 4: Refine  │  Semantic consistency check across all layers
+│    & Validate      │  Catches orphan pages, missing endpoints, role gaps
+└───────┬───────────┘
+        │
+        ▼
+┌───────────────────┐
+│  Runtime Renderer │  React-based execution simulator
+│  (Frontend)        │  Renders forms, tables, auth, business rules
+└───────────────────┘
+```
+
+## Stack
+- **Backend:** Python + FastAPI + Pydantic + Google Gemini 2.5 Flash
 - **Frontend:** Next.js 14 + Tailwind CSS + React
-- **Validation**: Pydantic for rigid cross-layer schema validation and auto-repair feedback loops.
+- **Validation:** Pydantic `ConfigDict(extra="forbid")` + cross-layer `@model_validator`
+- **Cost Tracking:** Per-stage token usage and estimated USD cost
 
-## 🚀 Setup Instructions
+## Key Design Decisions
 
-### 1. Backend Setup
-1. Open a terminal and navigate to the backend folder:
-   ```bash
-   cd backend
-   ```
-2. Activate the virtual environment (assuming it's already created):
-   ```bash
-   .\venv\Scripts\activate
-   ```
-3. Install dependencies (if not already installed):
-   ```bash
-   pip install fastapi uvicorn pydantic python-dotenv google-generativeai tenacity
-   ```
-4. **CRITICAL:** Set your Gemini API Key in the `.env` file.
-   - Open `backend/.env`
-   - Paste your API key: `GEMINI_API_KEY=AIzaSy...`
-5. Run the FastAPI Server:
-   ```bash
-   python app.py
-   ```
-   *The backend will start at http://localhost:8000*
+### Why Multi-Stage (Not Single Prompt)?
+Single prompts produce inconsistent, hallucination-prone outputs. Our compiler breaks the problem into focused stages where each stage's output is **strictly validated** before feeding the next. This mirrors how real compilers work: lexing → parsing → semantic analysis → code generation.
 
-### 2. Frontend Setup
-1. Open a new terminal and navigate to the frontend folder:
-   ```bash
-   cd frontend
-   ```
-2. Install dependencies (if not already installed):
-   ```bash
-   npm install
-   ```
-3. Run the development server:
-   ```bash
-   npm run dev
-   ```
-   *The UI will start at http://localhost:3000*
+### Intelligent Repair (Not Brute Retry)
+When Pydantic validation fails, we don't blindly retry. Instead, we extract the **exact** `ValidationError` traceback and inject it back into the LLM context as a targeted repair instruction. This means the model knows exactly what field was wrong and why.
 
-## 🧪 Running the Evaluation
-To test the deterministic capability across 20 diverse prompts including edge cases (vague, confusing, contrarian):
-1. Navigate to the backend directory.
-2. Run the evaluation script:
-   ```bash
-   python eval.py
-   ```
-3. The script will output latency, retry counts, and success rates to `eval_results.json`.
+### Cross-Layer Consistency
+Our `@model_validator` enforces:
+- UI component fields must exist in DB tables
+- Foreign keys must reference existing tables
+- Auth rules must reference existing pages and API paths
+- Page role restrictions must match defined auth rules
 
-## 💎 Architecture Details
-The pipeline executes in 3 stages + self-repair loop:
-1. **Intent Extraction**: Strips vagueness and establishes core entities.
-2. **System Design Layer**: Maps entities to pages, tables, and endpoints.
-3. **AppConfig Validation**: Fleshes out exact API/UI variables.
-4. **Self-Repair Core (Pydantic)**: Ensures strict schemas. If hallucination occurs, the traceback is re-injected automatically into the LLM context to correct the issue without broad generic retries.
+### Failure Handling
+- **Vague prompts:** Detected via `is_vague` flag, assumptions documented
+- **Conflicting requirements:** Detected via `has_conflicts` flag, resolutions documented
+- **Rate limiting:** Exponential backoff with graceful degradation
+
+### Cost vs Quality Tradeoff
+We use `gemini-2.5-flash` (not Pro) for optimal cost-efficiency. The pipeline tracks:
+- Input/output tokens per stage
+- Estimated cost in USD per request
+- Latency per stage
+
+This enables data-driven decisions about which stages need more tokens vs. which can be optimized.
+
+## Setup Instructions
+
+### 1. Backend
+```bash
+cd backend
+.\venv\Scripts\activate          # Windows
+pip install fastapi uvicorn pydantic python-dotenv google-generativeai
+```
+
+Set your Gemini API key in `backend/.env`:
+```
+GEMINI_API_KEY=your_key_here
+```
+
+Run:
+```bash
+python app.py
+# Backend starts at http://localhost:8001
+```
+
+### 2. Frontend
+```bash
+cd frontend
+npm install
+npm run dev
+# Frontend starts at http://localhost:3000
+```
+
+## Running Evaluations
+```bash
+cd backend
+python eval.py
+```
+
+Tests 20 prompts (10 real + 10 edge cases) and outputs:
+- Success rate (overall, real, edge cases)
+- Average latency
+- Retry counts
+- Failure type classification
+- Per-request cost breakdown
+- Results saved to `eval_results.json`
+
+## Schemas
+
+| Schema | Purpose |
+|--------|---------|
+| `IntentSchema` | Entities, roles, assumptions, conflicts |
+| `ArchitectureSchema` | App name, features, pages, tables, APIs |
+| `AppConfigSchema` | Full executable config with auth + business rules |
+| `AuthRule` | Role-based page and API access control |
+| `BusinessRule` | Conditional logic (e.g., premium gating) |
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/generate` | Runs the full 4-stage compiler pipeline |
+| `GET` | `/health` | Returns system status and configuration |

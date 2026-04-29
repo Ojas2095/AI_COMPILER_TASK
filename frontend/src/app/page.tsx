@@ -3,21 +3,31 @@
 import React, { useState } from "react";
 import RuntimeRenderer from "./RuntimeRenderer";
 
+const STAGE_META: Record<string, { label: string; icon: string; color: string }> = {
+  intent: { label: "Intent Extraction", icon: "1", color: "#3b82f6" },
+  design: { label: "System Design", icon: "2", color: "#8b5cf6" },
+  app_config: { label: "Schema Generation", icon: "3", color: "#a855f7" },
+  refinement: { label: "Cross-Layer Refinement", icon: "4", color: "#10b981" },
+};
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [logs, setLogs] = useState<any[]>([]);
   const [config, setConfig] = useState<any>(null);
+  const [metadata, setMetadata] = useState<any>(null);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"pipeline" | "runtime">("pipeline");
 
   const handleGenerate = async () => {
     setLoading(true);
     setLogs([]);
     setConfig(null);
+    setMetadata(null);
     setError("");
 
     try {
-      const res = await fetch("http://localhost:8000/api/generate", {
+      const res = await fetch("http://localhost:8001/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
@@ -26,6 +36,8 @@ export default function Home() {
       if (!res.ok) throw new Error(data.detail || "Unknown error");
       setLogs(data.logs);
       setConfig(data.config);
+      setMetadata(data.metadata);
+      setActiveTab("runtime");
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -34,67 +46,211 @@ export default function Home() {
   };
 
   return (
-    <main className="flex flex-col md:flex-row min-h-screen text-black bg-white">
-      {/* Left panel: Logs and input */}
-      <div className="w-full md:w-1/2 flex flex-col border-r border-gray-200 bg-gray-50 h-screen overflow-y-auto">
-        <div className="p-6 border-b border-gray-200 bg-white">
-          <h1 className="text-2xl font-black mb-2 flex items-center gap-2">🤖 AI Compiler</h1>
-          <p className="text-sm text-gray-500 mb-4">Enter a natural language description to compile into a validated system layout.</p>
-          <textarea 
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            className="w-full h-32 border border-gray-300 rounded-lg p-3 text-sm resize-none focus:outline-blue-500 text-black shadow-inner"
-            placeholder="e.g., Build a CRM with login, contacts, dashboard, role-based access..."
-          />
-          <button 
-            onClick={handleGenerate}
-            disabled={loading || !prompt.trim()}
-            className="mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white py-3 rounded-lg font-bold shadow-md transition-all"
-          >
-            {loading ? "Compiling Execution Graph..." : "Run Compiler Pipeline"}
-          </button>
-          
-          {error && <div className="mt-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded text-sm">{error}</div>}
+    <main className="flex flex-col min-h-screen" style={{ background: '#0a0a0f', color: '#e2e8f0' }}>
+      {/* Header */}
+      <header className="border-b px-6 py-4 flex items-center justify-between" style={{ borderColor: 'rgba(148,163,184,0.1)', background: '#12121a' }}>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold" style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)', color: 'white' }}>
+            AI
+          </div>
+          <div>
+            <h1 className="text-lg font-bold" style={{ color: '#e2e8f0' }}>AI Software Compiler</h1>
+            <p className="text-xs" style={{ color: '#64748b' }}>Natural Language &rarr; Validated Config &rarr; Executable App</p>
+          </div>
         </div>
-
-        <div className="p-6 flex flex-col gap-4">
-          <h2 className="font-bold text-gray-700">Pipeline Logs & Schema Validations</h2>
-          {logs.map((stage: any, i: number) => (
-             <div key={i} className="mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                   <span className="bg-gray-800 text-white text-xs px-2 py-1 rounded font-bold uppercase">{stage.stage} Layer</span>
-                </div>
-                <div className="pl-4 border-l-2 border-gray-300 flex flex-col gap-2">
-                   {stage.logs?.map((lLog: any, k: number) => (
-                     <div key={k} className={`p-3 rounded text-xs font-mono shadow-sm border ${lLog.status === 'success' ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
-                        <div className="font-bold mb-1">Attempt {lLog.attempt}: {lLog.status.toUpperCase()}</div>
-                        {lLog.status === 'success' ? (
-                           <div className="h-24 overflow-y-auto bg-white p-2 border border-green-100 text-gray-600 break-all">
-                              {lLog.raw}
-                           </div>
-                        ) : (
-                           <div className="text-red-700">{lLog.error}</div>
-                        )}
-                     </div>
-                   ))}
-                </div>
-             </div>
-          ))}
-          {loading && <div className="text-sm text-gray-500 animate-pulse flex gap-2 items-center">
-             <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 animate-bounce"></div> Building layout graph...
-          </div>}
+        <div className="flex items-center gap-2">
+          <span className="text-xs px-2 py-1 rounded-full font-mono" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981', border: '1px solid rgba(16,185,129,0.3)' }}>
+            Gemini 2.5 Flash
+          </span>
+          <span className="text-xs px-2 py-1 rounded-full font-mono" style={{ background: 'rgba(124,58,237,0.15)', color: '#a855f7', border: '1px solid rgba(124,58,237,0.3)' }}>
+            4-Stage Pipeline
+          </span>
         </div>
-      </div>
+      </header>
 
-      {/* Right panel: Runtime Simulator */}
-      <div className="w-full md:w-1/2 bg-gray-200 h-screen overflow-y-auto hidden md:block">
-         {config ? <RuntimeRenderer config={config} /> : (
-            <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 bg-[#eef1f5]">
-               <svg className="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-               <div>Awaiting Compilation Request</div>
-               <div className="text-xs mt-2 w-64 text-center">Output schemas will be executed down here as live structural previews.</div>
+      <div className="flex flex-1 flex-col md:flex-row" style={{ minHeight: 'calc(100vh - 65px)' }}>
+        {/* Left Panel: Input + Logs */}
+        <div className="w-full md:w-[480px] flex flex-col border-r overflow-y-auto" style={{ borderColor: 'rgba(148,163,184,0.1)', background: '#12121a' }}>
+          {/* Input Section */}
+          <div className="p-5 border-b" style={{ borderColor: 'rgba(148,163,184,0.1)' }}>
+            <label className="text-xs font-semibold uppercase tracking-wider mb-2 block" style={{ color: '#64748b' }}>
+              Natural Language Input
+            </label>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full h-28 rounded-lg p-3 text-sm resize-none focus:outline-none transition-all"
+              style={{
+                background: '#1a1a2e',
+                border: '1px solid rgba(148,163,184,0.15)',
+                color: '#e2e8f0',
+                fontFamily: 'Inter, sans-serif'
+              }}
+              placeholder='e.g., "Build a CRM with login, contacts, dashboard, role-based access, and premium plan with payments."'
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={loading || !prompt.trim()}
+              className="mt-3 w-full py-3 rounded-lg font-semibold text-sm transition-all"
+              style={{
+                background: loading ? '#4a4a5a' : 'linear-gradient(135deg, #7c3aed, #a855f7)',
+                color: 'white',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                opacity: (!prompt.trim() && !loading) ? 0.5 : 1,
+              }}
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                  Compiling Pipeline...
+                </span>
+              ) : (
+                "Compile Application"
+              )}
+            </button>
+
+            {error && (
+              <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}>
+                {error}
+              </div>
+            )}
+          </div>
+
+          {/* Cost & Metadata Panel */}
+          {metadata && (
+            <div className="p-4 border-b" style={{ borderColor: 'rgba(148,163,184,0.1)' }}>
+              <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#64748b' }}>
+                Pipeline Metrics
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-lg p-3 text-center" style={{ background: '#1a1a2e' }}>
+                  <div className="text-lg font-bold" style={{ color: '#10b981' }}>{metadata.total_latency_seconds}s</div>
+                  <div className="text-[10px] uppercase" style={{ color: '#64748b' }}>Latency</div>
+                </div>
+                <div className="rounded-lg p-3 text-center" style={{ background: '#1a1a2e' }}>
+                  <div className="text-lg font-bold" style={{ color: '#a855f7' }}>{metadata.cost?.total_input_tokens || 0}</div>
+                  <div className="text-[10px] uppercase" style={{ color: '#64748b' }}>Tokens In</div>
+                </div>
+                <div className="rounded-lg p-3 text-center" style={{ background: '#1a1a2e' }}>
+                  <div className="text-lg font-bold" style={{ color: '#3b82f6' }}>${metadata.cost?.total_cost_usd || '0.00'}</div>
+                  <div className="text-[10px] uppercase" style={{ color: '#64748b' }}>Est. Cost</div>
+                </div>
+              </div>
+
+              {/* Assumptions & Conflicts */}
+              {metadata.intent?.assumptions?.length > 0 && (
+                <div className="mt-3 p-3 rounded-lg text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                  <div className="font-semibold mb-1" style={{ color: '#f59e0b' }}>Assumptions Made:</div>
+                  <ul className="list-disc pl-4" style={{ color: '#94a3b8' }}>
+                    {metadata.intent.assumptions.map((a: string, i: number) => <li key={i}>{a}</li>)}
+                  </ul>
+                </div>
+              )}
+              {metadata.intent?.has_conflicts && (
+                <div className="mt-2 p-3 rounded-lg text-xs" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                  <div className="font-semibold mb-1" style={{ color: '#ef4444' }}>Conflicts Resolved:</div>
+                  <ul className="list-disc pl-4" style={{ color: '#94a3b8' }}>
+                    {metadata.intent.conflict_resolution?.map((c: string, i: number) => <li key={i}>{c}</li>)}
+                  </ul>
+                </div>
+              )}
             </div>
-         )}
+          )}
+
+          {/* Pipeline Logs */}
+          <div className="p-5 flex-1">
+            <div className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: '#64748b' }}>
+              Pipeline Execution Log
+            </div>
+            {logs.map((stage: any, i: number) => {
+              const meta = STAGE_META[stage.stage] || { label: stage.stage, icon: "?", color: "#64748b" };
+              return (
+                <div key={i} className="mb-4 animate-fade-in" style={{ animationDelay: `${i * 100}ms` }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: meta.color }}>
+                      {meta.icon}
+                    </div>
+                    <span className="text-xs font-semibold" style={{ color: meta.color }}>{meta.label}</span>
+                    {stage.logs?.every((l: any) => l.status === 'success' || l.status === 'skipped') && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: 'rgba(16,185,129,0.15)', color: '#10b981' }}>PASS</span>
+                    )}
+                  </div>
+                  <div className="pl-5 border-l flex flex-col gap-1.5" style={{ borderColor: `${meta.color}33` }}>
+                    {stage.logs?.map((lLog: any, k: number) => (
+                      <div key={k} className="p-2.5 rounded-lg text-xs font-mono" style={{
+                        background: lLog.status === 'success' ? 'rgba(16,185,129,0.06)' : lLog.status === 'skipped' ? 'rgba(245,158,11,0.06)' : 'rgba(239,68,68,0.06)',
+                        border: `1px solid ${lLog.status === 'success' ? 'rgba(16,185,129,0.15)' : lLog.status === 'skipped' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)'}`,
+                      }}>
+                        <div className="font-semibold mb-1" style={{ color: lLog.status === 'success' ? '#10b981' : lLog.status === 'skipped' ? '#f59e0b' : '#ef4444' }}>
+                          Attempt {lLog.attempt}: {lLog.status.toUpperCase()}
+                        </div>
+                        {lLog.status === 'success' && (
+                          <div className="h-16 overflow-y-auto p-1.5 rounded text-[10px] break-all" style={{ background: 'rgba(0,0,0,0.3)', color: '#64748b' }}>
+                            {lLog.raw?.substring(0, 300)}...
+                          </div>
+                        )}
+                        {lLog.status !== 'success' && lLog.error && (
+                          <div className="text-[10px]" style={{ color: '#ef4444' }}>{lLog.error.substring(0, 200)}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+            {loading && (
+              <div className="flex items-center gap-2 text-xs mt-2" style={{ color: '#a855f7' }}>
+                <span className="w-2 h-2 rounded-full animate-ping" style={{ background: '#a855f7' }}></span>
+                Processing through pipeline stages...
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Panel: Runtime Preview */}
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0a0a0f' }}>
+          {/* Tab Bar */}
+          <div className="flex border-b px-4" style={{ borderColor: 'rgba(148,163,184,0.1)', background: '#12121a' }}>
+            <button
+              onClick={() => setActiveTab("pipeline")}
+              className="px-4 py-2.5 text-xs font-semibold transition-all"
+              style={{
+                color: activeTab === 'pipeline' ? '#a855f7' : '#64748b',
+                borderBottom: activeTab === 'pipeline' ? '2px solid #a855f7' : '2px solid transparent',
+              }}
+            >
+              Architecture View
+            </button>
+            <button
+              onClick={() => setActiveTab("runtime")}
+              className="px-4 py-2.5 text-xs font-semibold transition-all"
+              style={{
+                color: activeTab === 'runtime' ? '#a855f7' : '#64748b',
+                borderBottom: activeTab === 'runtime' ? '2px solid #a855f7' : '2px solid transparent',
+              }}
+            >
+              Runtime Simulation
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-5">
+            {config ? (
+              <RuntimeRenderer config={config} activeTab={activeTab} metadata={metadata} />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center" style={{ color: '#64748b' }}>
+                <div className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4" style={{ background: '#1a1a2e', border: '1px solid rgba(148,163,184,0.1)' }}>
+                  <svg className="w-10 h-10" style={{ color: '#4a4a5a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                  </svg>
+                </div>
+                <div className="text-sm font-semibold mb-1">Awaiting Compilation</div>
+                <div className="text-xs text-center max-w-xs" style={{ color: '#4a4a5a' }}>
+                  Enter a natural language prompt and the compiler will generate a validated, executable application schema.
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </main>
   );
