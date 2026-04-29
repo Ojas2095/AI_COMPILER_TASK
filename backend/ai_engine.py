@@ -310,8 +310,26 @@ class PipelineEngine:
                     }
                 ],
                 database_tables=[
-                    {"name": "users", "columns": [{"name": "id", "type": "string", "primary_key": True, "nullable": False, "relations": None}, {"name": "email", "type": "string", "primary_key": False, "nullable": False, "relations": None}, {"name": "plan", "type": "string", "primary_key": False, "nullable": False, "relations": None}]},
-                    {"name": "contacts", "columns": [{"name": "id", "type": "string", "primary_key": True, "nullable": False, "relations": None}, {"name": "user_id", "type": "string", "primary_key": False, "nullable": False, "relations": "users.id"}, {"name": "first_name", "type": "string", "primary_key": False, "nullable": False, "relations": None}, {"name": "last_name", "type": "string", "primary_key": False, "nullable": False, "relations": None}, {"name": "email", "type": "string", "primary_key": False, "nullable": False, "relations": None}, {"name": "phone", "type": "string", "primary_key": False, "nullable": False, "relations": None}]}
+                    {"name": "users", "columns": [
+                        {"name": "id", "type": "string", "primary_key": True, "nullable": False, "relations": None}, 
+                        {"name": "email", "type": "string", "primary_key": False, "nullable": False, "relations": None}, 
+                        {"name": "password", "type": "string", "primary_key": False, "nullable": False, "relations": None},
+                        {"name": "name", "type": "string", "primary_key": False, "nullable": False, "relations": None},
+                        {"name": "plan", "type": "string", "primary_key": False, "nullable": False, "relations": None}
+                    ]},
+                    {"name": "contacts", "columns": [
+                        {"name": "id", "type": "string", "primary_key": True, "nullable": False, "relations": None}, 
+                        {"name": "user_id", "type": "string", "primary_key": False, "nullable": False, "relations": "users.id"}, 
+                        {"name": "first_name", "type": "string", "primary_key": False, "nullable": False, "relations": None}, 
+                        {"name": "last_name", "type": "string", "primary_key": False, "nullable": False, "relations": None}, 
+                        {"name": "email", "type": "string", "primary_key": False, "nullable": False, "relations": None}, 
+                        {"name": "phone", "type": "string", "primary_key": False, "nullable": False, "relations": None}
+                    ]},
+                    {"name": "analytics", "columns": [
+                        {"name": "id", "type": "string", "primary_key": True, "nullable": False, "relations": None},
+                        {"name": "total_revenue", "type": "number", "primary_key": False, "nullable": False, "relations": None},
+                        {"name": "active_users", "type": "number", "primary_key": False, "nullable": False, "relations": None}
+                    ]}
                 ],
                 api_endpoints=[
                     {"path": "/api/auth/login", "method": "POST", "description": "User login.", "requires_auth": False, "roles_allowed": [], "request_fields": ["email", "password"], "response_fields": ["token"]},
