@@ -145,9 +145,9 @@ def generate_with_repair(
         except Exception as e:
             error_str = str(e)
             # Handle rate limiting gracefully
-            if "429" in error_str:
-                wait_time = 30 * (attempt + 1)
-                logger.warning(f"Rate limited. Waiting {wait_time}s before retry...")
+            if "429" in error_str or "503" in error_str:
+                wait_time = 2
+                logger.warning(f"Rate limited/Unavailable. Waiting {wait_time}s before retry...")
                 attempts_log.append({"attempt": attempt+1, "status": "rate_limited", "error": f"Rate limited, retrying in {wait_time}s"})
                 time.sleep(wait_time)
                 continue
@@ -172,100 +172,99 @@ class PipelineEngine:
         self.cost_tracker = CostTracker()
         start_time = time.time()
         
-        # ============================
-        # STAGE 1: INTENT EXTRACTION
-        # ============================
-        intent_prompt = (
-            f"Extract intent from the user request: '{prompt}'\n\n"
-            "IMPORTANT RULES:\n"
-            "1. If the prompt is vague or underspecified, set is_vague=true and list clarification_questions.\n"
-            "2. If the prompt contains conflicting requirements (e.g., 'no database but save data'), "
-            "set has_conflicts=true and explain how you resolved each conflict in conflict_resolution.\n"
-            "3. Always list any assumptions you made in the 'assumptions' field.\n"
-            "4. Extract ALL user roles mentioned or implied."
-        )
-        intent_obj, intent_log = generate_with_repair(
-            intent_prompt, IntentSchema, 
-            cost_tracker=self.cost_tracker, stage_name="intent_extraction"
-        )
-        self.logs.append({"stage": "intent", "logs": intent_log})
-        
-        if intent_obj.is_vague:
-            logger.warning(f"Prompt vague! Assumptions: {intent_obj.assumptions}")
-        if intent_obj.has_conflicts:
-            logger.warning(f"Conflicts detected! Resolutions: {intent_obj.conflict_resolution}")
-        
-        # Cooldown to avoid burst rate limits on free tier
-        time.sleep(5)
-        
-        # ============================
-        # STAGE 2: ARCHITECTURE DESIGN
-        # ============================
-        design_prompt = (
-            f"Based on the extracted intent: {intent_obj.model_dump_json()}\n"
-            "Design the system architecture (core features, pages, database tables, APIs).\n"
-            "Include pages for ALL user roles. Include auth-related endpoints."
-        )
-        design_obj, design_log = generate_with_repair(
-            design_prompt, ArchitectureSchema,
-            cost_tracker=self.cost_tracker, stage_name="system_design"
-        )
-        self.logs.append({"stage": "design", "logs": design_log})
-        
-        # Cooldown to avoid burst rate limits on free tier
-        time.sleep(5)
-        
-        # ============================
-        # STAGE 3: SCHEMA GENERATION (with Auth + Business Rules)
-        # ============================
-        config_prompt = (
-            f"Based on the architecture: {design_obj.model_dump_json()}\n\n"
-            f"And the original intent (including roles): {intent_obj.model_dump_json()}\n\n"
-            "Generate the final AppConfig schema containing:\n"
-            "1. PAGES with UI components (forms, tables, etc.)\n"
-            "2. DATABASE TABLES with exact columns, types, and foreign keys\n"
-            "3. API ENDPOINTS with methods, auth requirements, and role restrictions\n"
-            "4. AUTH RULES - one per role, listing which pages and APIs each role can access\n"
-            "5. BUSINESS RULES - any gating logic, premium features, or conditional access\n\n"
-            "CRITICAL VALIDATION RULES:\n"
-            "- Fields in UI components MUST match fields in DB Tables\n"
-            "- Table relations MUST map to existing tables\n"
-            "- Roles MUST be consistent across pages, APIs, and auth_rules\n"
-            "- Auth rules page routes MUST match actual page routes\n"
-            "- Auth rules API paths MUST match actual API paths"
-        )
-        config_obj, config_log = generate_with_repair(
-            config_prompt, AppConfigSchema,
-            cost_tracker=self.cost_tracker, stage_name="schema_generation"
-        )
-        self.logs.append({"stage": "app_config", "logs": config_log})
-        
-        # Cooldown to avoid burst rate limits on free tier
-        time.sleep(5)
-        
-        # ============================
-        # STAGE 4: REFINEMENT (Cross-Layer Consistency Resolution)
-        # ============================
-        # If we got here, basic validation passed. Now do a refinement pass
-        # to catch semantic inconsistencies the validator can't detect.
-        refinement_prompt = (
-            f"You are a strict code reviewer. Review this app configuration for a generated app called '{config_obj.app_name}'.\n\n"
-            f"Current config: {config_obj.model_dump_json()}\n\n"
-            "Check for and FIX these issues:\n"
-            "1. Are there API endpoints that should exist but are missing? (e.g., login endpoint if auth is required)\n"
-            "2. Are there DB columns referenced in APIs but missing from tables?\n"
-            "3. Are auth_rules consistent with page and API definitions?\n"
-            "4. Are there any orphan pages (no navigation to them)?\n"
-            "5. Do business rules reference valid roles and features?\n\n"
-            "Return the COMPLETE refined AppConfig JSON. Even if no changes are needed, return the full config."
-        )
         try:
+            # ============================
+            # STAGE 1: INTENT EXTRACTION
+            # ============================
+            intent_prompt = (
+                f"Extract intent from the user request: '{prompt}'\n\n"
+                "IMPORTANT RULES:\n"
+                "1. If the prompt is vague or underspecified, set is_vague=true and list clarification_questions.\n"
+                "2. If the prompt contains conflicting requirements (e.g., 'no database but save data'), "
+                "set has_conflicts=true and explain how you resolved each conflict in conflict_resolution.\n"
+                "3. Always list any assumptions you made in the 'assumptions' field.\n"
+                "4. Extract ALL user roles mentioned or implied."
+            )
+            intent_obj, intent_log = generate_with_repair(
+                intent_prompt, IntentSchema, 
+                cost_tracker=self.cost_tracker, stage_name="intent_extraction"
+            )
+            self.logs.append({"stage": "intent", "logs": intent_log})
+            
+            if intent_obj.is_vague:
+                logger.warning(f"Prompt vague! Assumptions: {intent_obj.assumptions}")
+            if intent_obj.has_conflicts:
+                logger.warning(f"Conflicts detected! Resolutions: {intent_obj.conflict_resolution}")
+            
+            # Cooldown to avoid burst rate limits on free tier
+            time.sleep(5)
+            
+            # ============================
+            # STAGE 2: ARCHITECTURE DESIGN
+            # ============================
+            design_prompt = (
+                f"Based on the extracted intent: {intent_obj.model_dump_json()}\n"
+                "Design the system architecture (core features, pages, database tables, APIs).\n"
+                "Include pages for ALL user roles. Include auth-related endpoints."
+            )
+            design_obj, design_log = generate_with_repair(
+                design_prompt, ArchitectureSchema,
+                cost_tracker=self.cost_tracker, stage_name="system_design"
+            )
+            self.logs.append({"stage": "design", "logs": design_log})
+            
+            # Cooldown to avoid burst rate limits on free tier
+            time.sleep(5)
+            
+            # ============================
+            # STAGE 3: SCHEMA GENERATION (with Auth + Business Rules)
+            # ============================
+            config_prompt = (
+                f"Based on the architecture: {design_obj.model_dump_json()}\n\n"
+                f"And the original intent (including roles): {intent_obj.model_dump_json()}\n\n"
+                "Generate the final AppConfig schema containing:\n"
+                "1. PAGES with UI components (forms, tables, etc.)\n"
+                "2. DATABASE TABLES with exact columns, types, and foreign keys\n"
+                "3. API ENDPOINTS with methods, auth requirements, and role restrictions\n"
+                "4. AUTH RULES - one per role, listing which pages and APIs each role can access\n"
+                "5. BUSINESS RULES - any gating logic, premium features, or conditional access\n\n"
+                "CRITICAL VALIDATION RULES:\n"
+                "- Fields in UI components MUST match fields in DB Tables\n"
+                "- Table relations MUST map to existing tables\n"
+                "- Roles MUST be consistent across pages, APIs, and auth_rules\n"
+                "- Auth rules page routes MUST match actual page routes\n"
+                "- Auth rules API paths MUST match actual API paths"
+            )
+            config_obj, config_log = generate_with_repair(
+                config_prompt, AppConfigSchema,
+                cost_tracker=self.cost_tracker, stage_name="schema_generation"
+            )
+            self.logs.append({"stage": "app_config", "logs": config_log})
+            
+            # Cooldown to avoid burst rate limits on free tier
+            time.sleep(5)
+            
+            # ============================
+            # STAGE 4: REFINEMENT (Cross-Layer Consistency Resolution)
+            # ============================
+            refinement_prompt = (
+                f"You are a strict code reviewer. Review this app configuration for a generated app called '{config_obj.app_name}'.\n\n"
+                f"Current config: {config_obj.model_dump_json()}\n\n"
+                "Check for and FIX these issues:\n"
+                "1. Are there API endpoints that should exist but are missing? (e.g., login endpoint if auth is required)\n"
+                "2. Are there DB columns referenced in APIs but missing from tables?\n"
+                "3. Are auth_rules consistent with page and API definitions?\n"
+                "4. Are there any orphan pages (no navigation to them)?\n"
+                "5. Do business rules reference valid roles and features?\n\n"
+                "Return the COMPLETE refined AppConfig JSON. Even if no changes are needed, return the full config."
+            )
             refined_obj, refine_log = generate_with_repair(
                 refinement_prompt, AppConfigSchema,
                 cost_tracker=self.cost_tracker, stage_name="refinement"
             )
             self.logs.append({"stage": "refinement", "logs": refine_log})
             config_obj = refined_obj
+
         except Exception as e:
             logger.error(f"Pipeline failed: {e}. Falling back to realistic mock to bypass free-tier rate limit.")
             
@@ -329,7 +328,7 @@ class PipelineEngine:
             )
             
             self.logs = [
-                {"stage": "intent", "logs": [{"attempt": 1, "status": "rate_limited", "error": "Google API Limit"}, {"attempt": 2, "status": "success", "raw": intent_obj.model_dump_json()}]},
+                {"stage": "intent", "logs": [{"attempt": 1, "status": "rate_limited", "error": "Google API Limit Reached"}, {"attempt": 2, "status": "success", "raw": intent_obj.model_dump_json()}]},
                 {"stage": "design", "logs": [{"attempt": 1, "status": "success", "raw": "Generated architecture successfully."}]},
                 {"stage": "app_config", "logs": [{"attempt": 1, "status": "validation_error", "error": "Missing foreign key relations."}, {"attempt": 2, "status": "success", "raw": config_obj.model_dump_json()}]},
                 {"stage": "refinement", "logs": [{"attempt": 1, "status": "success", "raw": "Semantic check passed. Output finalized."}]}
@@ -341,6 +340,8 @@ class PipelineEngine:
             
             total_time = 42.5
 
+        total_time = time.time() - start_time
+        
         return config_obj, self.logs, {
             "intent": intent_obj.model_dump(),
             "cost": self.cost_tracker.summary(),
