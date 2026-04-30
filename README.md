@@ -41,7 +41,7 @@ Natural Language Prompt
 ```
 
 ## Stack
-- **Backend:** Python + FastAPI + Pydantic + Google Gemini 2.5 Flash
+- **Backend:** Python + FastAPI + Pydantic + Google Gemini 2.0 Flash
 - **Frontend:** Next.js 14 + Tailwind CSS + React
 - **Validation:** Pydantic `ConfigDict(extra="forbid")` + cross-layer `@model_validator`
 - **Cost Tracking:** Per-stage token usage and estimated USD cost
@@ -64,22 +64,28 @@ Our `@model_validator` enforces:
 ### Failure Handling
 - **Vague prompts:** Detected via `is_vague` flag, assumptions documented
 - **Conflicting requirements:** Detected via `has_conflicts` flag, resolutions documented
-- **Rate limiting:** Exponential backoff with graceful degradation
+- **Rate limiting:** Exponential backoff with graceful degradation to validated mock
 
 ### Cost vs Quality Tradeoff
-We use `gemini-2.5-flash` (not Pro) for optimal cost-efficiency. The pipeline tracks:
+We use `gemini-2.0-flash` for optimal cost-efficiency. The pipeline tracks:
 - Input/output tokens per stage
 - Estimated cost in USD per request
 - Latency per stage
 
 This enables data-driven decisions about which stages need more tokens vs. which can be optimized.
 
+### Runtime Simulation
+The frontend includes a fully interactive runtime simulator that:
+- **Renders generated pages** with forms, tables, and dashboard widgets using live mock data
+- **Simulates authentication** — users can switch roles and see page access restrictions enforced
+- **Interactive actions** — form submissions, table row operations, all with toast feedback
+- **Architecture visualization** — database schemas, API endpoints, auth matrices, and business rules
+
 ## Setup Instructions
 
 ### 1. Backend
 ```bash
 cd backend
-.\venv\Scripts\activate          # Windows
 pip install fastapi uvicorn pydantic python-dotenv google-generativeai
 ```
 
