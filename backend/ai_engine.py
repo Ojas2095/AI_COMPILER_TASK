@@ -63,7 +63,7 @@ def get_model():
     else:
         genai.configure(api_key=api_key)
     
-    return genai.GenerativeModel("gemini-1.5-flash")
+    return genai.GenerativeModel("gemini-2.0-flash")
 
 
 def generate_with_repair(
@@ -355,8 +355,6 @@ class PipelineEngine:
             self.cost_tracker.record("design", 550, 800)
             self.cost_tracker.record("app_config", 1350, 2500)
             self.cost_tracker.record("refinement", 3850, 3900)
-            
-            total_time = 42.5
 
         total_time = time.time() - start_time
         
